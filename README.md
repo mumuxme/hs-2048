@@ -29,6 +29,11 @@ or
 ghci 2048.hs
 ```
 
+or
+
+```
+cabal exec ghc 2048.hs
+```
 
 License
 ---------
