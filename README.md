@@ -35,8 +35,13 @@ or
 cabal exec ghc 2048.hs
 ```
 
+TODO
+--------
+
+- Add solution
+
 License
----------
+--------
 
 GNU GPL v3, <http://www.gnu.org/licenses/>
 
