@@ -17,13 +17,16 @@
  - along with this program.  If not, see <http://www.gnu.org/licenses/>.
  -}
 
-import Prelude hiding (Left, Right)
+module L2048 where
+
 import Data.List
-import System.Random (randomRIO)
+import Data.Monoid              ((<>))
 import System.IO
 import System.Console.ANSI
-import System.Exit (exitSuccess)
-import System.Posix.IO (fdRead, stdInput)
+import System.Posix.IO          (fdRead, stdInput)
+import System.Random            (randomRIO)
+import System.Exit              (exitSuccess)
+import Prelude           hiding (Left, Right)
 
 data Move = Left | Right | Up | Down
 type Board = [[Int]]
@@ -32,11 +35,14 @@ type Coordinate = (Int, Int)
 -- new randow value produced from this list
 vals = [2, 2, 4, 4, 4]
 -- unit board size
-size = 7
+sizeGird = 7
+-- Board: rowBoard × colBoard gird
+rowBoard = 5
+colBoard = 5
 
 
-main :: IO ()
-main = do
+l2048 :: IO ()
+l2048 = do
     hSetBuffering stdin NoBuffering
     board <- addRandom initBoard
     loop board
@@ -64,20 +70,18 @@ renew board = do
     return newBoard
 
 
-{- Init and update -}
-
 initBoard :: Board
-initBoard = replicate 4 [0, 0, 0, 0]
+initBoard = replicate colBoard <$> replicate rowBoard 0
 
 -- the coordinates of zeros
 countZero :: Board -> [Coordinate]
 countZero board = filter (\(row, col) -> (board!!row)!!col == 0) coordinates
-    where coordinates = [(r, c) | r <- [0..3], c <- [0..3]]
+    where coordinates = [(r, c) | r <- [0..rowBoard-1], c <- [0..colBoard-1]]
 
 random :: [a] -> IO a
 random xs = do
     i <- randomRIO (0, length xs - 1)
-    return (xs !! i)
+    return $ xs !! i
 
 addRandom :: Board -> IO Board
 addRandom board = do
@@ -88,24 +92,20 @@ addRandom board = do
             update (xs:xss) (row, col) val
               | row == 0 = (replaceNth col val xs) : xss
               | otherwise = xs : (update xss (row-1, col) val)
-                where
-                  replaceNth n val (x:xs)
-                    | n == 0 = val : xs
-                    | otherwise = x : (replaceNth (n-1) val xs)
+            replaceNth n val (x:xs)
+              | n == 0 = val : xs
+              | otherwise = x : (replaceNth (n-1) val xs)
 
 
-{- Action -}
-
--- TODO, may optimize
 -- merge one row (to left)
 merge :: [Int] -> [Int]
 merge row = eles ++ zeros
     where eles = merged $ filter (/=0) row
-          zeros = replicate (length row - length eles) 0
           merged (x:y:xs)
             | (x == y) = (x + y) : merged xs
             | otherwise = x : merged (y:xs)
           merged xs = xs
+          zeros = replicate (length row - length eles) 0
 
 move :: Move -> Board -> Board
 move Left = map merge
@@ -113,10 +113,9 @@ move Right = map (reverse . merge . reverse)
 move Up = transpose . move Left  . transpose
 move Down = transpose . move Right . transpose
 
--- TODO, no need to run all
 isMove :: Board -> Bool
 isMove board = not . null $ zeros
-    where zeros = concat $ map (countZero . flip move board) [Left, Right, Up, Down]
+    where zeros = [Left, Right, Up, Down] >>= countZero . (`move` board)
 
 is2048 :: Board -> Bool
 is2048 board = not . null $ filter (== 2048) (concat board)
@@ -129,13 +128,15 @@ score board = show . sum $ map (\x -> x*(f x)) (concat board)
             | otherwise = 1 + f (x `div` 2)
 
 
-{- Print -}
-
 drawBoard :: Board -> IO ()
 drawBoard board = do
     resetScreen
     let nowSocre = score board
-    putStr ("2048" ++ concat (replicate (4*size - 4 - 7 - length nowSocre) " ") ++ "Score: " ++ nowSocre ++ "\n\n")
+    putStr $ "2048"
+            <> concat (replicate (4*sizeGird - 4 - 7 - length nowSocre) " ")
+            <> "Score: "
+            <> nowSocre
+            <> "\n\n"
     mapM_ (putStr . putRow) board
     putStrLn ("\nMove: \"wasd\" or \"hjkl\" or \"↑↓←→\"\n" ++ "Exit: q")
 
@@ -166,16 +167,14 @@ getVal x = case x of
              x -> bg1 ++ show x ++ bg2
     where bg1 = concat (replicate (len `div` 2) " ")
           bg2 = concat (replicate (len - (len`div`2)) " ")
-          len = (size - (length . show $ x))
+          len = (sizeGird - (length . show $ x))
 
 putRow :: [Int] -> String
 putRow row = rowTop ++ "\n" ++ rowMid ++ "\n" ++ rowBot ++ "\n"
     where rowBot = rowTop
-          rowTop = concat $ map (\x -> (getColor x) ++ concat (replicate size " ") ++ "\^[[0m") row
+          rowTop = concat $ map (\x -> (getColor x) ++ concat (replicate sizeGird " ") ++ "\^[[0m") row
           rowMid = concat $ map (\x -> (getColor x) ++ getVal x ++ "\^[[0m") row
 
-
-{- Capture key input -}
 
 captureMove :: IO Move
 captureMove = do
@@ -187,4 +186,3 @@ captureMove = do
 keyMoves :: [(String, Move)]
 keyMoves = keys [["a","d","w","s"], ["h","l","k","j"], ["\^[[D","\^[[C","\^[[A","\^[[B"]]
     where keys xss = concatMap (flip zip [Left, Right, Up, Down]) xss
-
